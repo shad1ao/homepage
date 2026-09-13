@@ -159,7 +159,7 @@ import '../style.css'
         const render = (time) => {
           const delta = Math.min(time - previousTime, 32)
           previousTime = time
-          rotation += delta * 0.0000238464
+          rotation += delta * 0.00002861568
           drawTrail()
           requestAnimationFrame(render)
         }
