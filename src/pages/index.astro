@@ -1,0 +1,174 @@
+---
+import '../style.css'
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Shadiao 的彩色流动星轨首页" />
+    <title>Shadiao</title>
+  </head>
+  <body>
+    <main class="sky">
+      <canvas id="star-trails" aria-hidden="true"></canvas>
+      <div class="intro">
+        <h1 aria-label="Hello"><span aria-hidden="true" class="intro-letter" style="--letter-index: 0">H</span><span aria-hidden="true" class="intro-letter" style="--letter-index: 1">e</span><span aria-hidden="true" class="intro-letter" style="--letter-index: 2">l</span><span aria-hidden="true" class="intro-letter" style="--letter-index: 3">l</span><span aria-hidden="true" class="intro-letter" style="--letter-index: 4">o</span></h1>
+        <p>I'm Shadiao</p>
+      </div>
+    </main>
+    <script>
+      import { gsap } from 'gsap'
+
+      const motion = gsap.matchMedia()
+      motion.add('(prefers-reduced-motion: no-preference)', () => {
+        gsap.from('.intro-letter', {
+          opacity: 0,
+          y: 12,
+          duration: 0.55,
+          stagger: 0.14,
+          delay: 0.2,
+          ease: 'power3.out',
+          clearProps: 'opacity,transform',
+        })
+      })
+
+      const surface = document.querySelector('#star-trails')
+      const context = surface?.getContext('2d')
+
+      if (surface && context) {
+        const palette = ['94,185,230', '85,202,211', '102,199,158', '219,132,179', '177,148,220', '224,192,113', '223,151,114']
+        const stars = []
+        let width = 0
+        let height = 0
+        let scale = 1
+        let fieldSize = 0
+        let centerX = 0
+        let centerY = 0
+        let rotation = 0
+        let trailOriginRotation = rotation
+        let previousTime = performance.now()
+        const trailLength = 0.22
+        const drawTrail = () => {
+          context.setTransform(scale, 0, 0, scale, 0, 0)
+          context.fillStyle = '#000'
+          context.fillRect(0, 0, width, height)
+          const travelledAngle = Math.max(0, rotation - trailOriginRotation)
+          const visibleTrailLength = Math.min(trailLength, travelledAngle)
+          for (const star of stars) {
+            const head = star.angle + rotation
+            const tail = head - visibleTrailLength
+            context.lineWidth = star.size * 2
+            context.lineCap = 'round'
+            if (visibleTrailLength * star.radius < 0.5) {
+              context.fillStyle = `rgba(${star.color},${star.alpha})`
+              context.beginPath()
+              context.arc(centerX + Math.cos(head) * star.radius, centerY + Math.sin(head) * star.radius, star.size, 0, Math.PI * 2)
+              context.fill()
+              continue
+            }
+            const gradient = context.createConicGradient(tail, centerX, centerY)
+            const fraction = visibleTrailLength / (Math.PI * 2)
+            gradient.addColorStop(0, `rgba(${star.color},0)` )
+            gradient.addColorStop(fraction * 0.2, `rgba(${star.color},${star.alpha * 0.55})`)
+            gradient.addColorStop(fraction, `rgba(${star.color},${star.alpha})`)
+            gradient.addColorStop(fraction + 0.01, `rgba(${star.color},${star.alpha})`)
+            gradient.addColorStop(fraction + 0.02, `rgba(${star.color},0)`)
+            gradient.addColorStop(1, `rgba(${star.color},0)`)
+            context.strokeStyle = gradient
+            context.beginPath()
+            context.arc(centerX, centerY, star.radius, tail, head)
+            context.stroke()
+          }
+        }
+
+        const buildStarField = () => {
+          scale = Math.min(devicePixelRatio || 1, 2)
+          width = innerWidth
+          height = innerHeight
+          surface.width = width * scale
+          surface.height = height * scale
+          surface.style.width = `${width}px`
+          surface.style.height = `${height}px`
+          context.setTransform(scale, 0, 0, scale, 0, 0)
+          context.fillStyle = '#000'
+          context.fillRect(0, 0, width, height)
+          centerX = -width * 0.08
+          centerY = height * 1.08
+          fieldSize = Math.ceil(Math.max(width, height) * 3)
+          stars.length = 0
+          const middle = fieldSize / 2
+          const starCount = Math.min(1411, Math.max(778, Math.floor(width * height / 1181)))
+          const minimumGap = 30
+          const occupied = new Map()
+          const occupiedOrbits = []
+          const reservePosition = (x, y, angle, radius) => {
+            const cellX = Math.floor(x / minimumGap)
+            const cellY = Math.floor(y / minimumGap)
+            for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+              for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+                const nearby = occupied.get(`${cellX + offsetX}:${cellY + offsetY}`) ?? []
+                if (nearby.some((point) => Math.hypot(point.x - x, point.y - y) < minimumGap)) return false
+              }
+            }
+            const overlapsTrail = occupiedOrbits.some((point) => {
+              const angularDistance = Math.abs(Math.atan2(Math.sin(point.angle - angle), Math.cos(point.angle - angle)))
+              return Math.abs(point.radius - radius) < 16 && angularDistance < trailLength * 1.35
+            })
+            if (overlapsTrail) return false
+            const key = `${cellX}:${cellY}`
+            occupied.set(key, [...(occupied.get(key) ?? []), { x, y }])
+            occupiedOrbits.push({ angle, radius })
+            return true
+          }
+
+          {
+            const rightStarCount = Math.min(24, Math.max(6, Math.round(width * height / 60000)))
+            const initialStarCount = Math.min(60, Math.max(12, Math.round(width * height / 30000)))
+            for (let pass = 0; pass < 3; pass += 1) {
+            const targetCount = pass === 0 ? starCount : pass === 1 ? rightStarCount : initialStarCount
+            let placed = 0
+            let attempts = 0
+            while (placed < targetCount && attempts < targetCount * 24) {
+              attempts += 1
+              let angle = Math.random() * Math.PI * 2
+              let radius = 70 + Math.pow(Math.random(), 0.72) * middle * 0.94
+              if (pass > 0) {
+                const screenX = width * (pass === 1 ? 0.65 + Math.random() * 0.35 : Math.random()) - centerX
+                const screenY = height * Math.random() - centerY
+                angle = Math.atan2(screenY, screenX) - rotation
+                radius = Math.hypot(screenX, screenY)
+                if (radius > middle - 6) continue
+              }
+              const x = middle + Math.cos(angle) * radius
+              const y = middle + Math.sin(angle) * radius
+              if (!reservePosition(x, y, angle, radius)) continue
+              const color = palette[Math.floor(Math.random() * palette.length)]
+              const alpha = 0.58 + Math.random() * 0.32
+              const size = 1.68 + Math.random() * 1.05
+              stars.push({ angle, radius, color, alpha, size })
+              placed += 1
+            }
+            }
+          }
+          trailOriginRotation = rotation
+          drawTrail()
+        }
+
+        const render = (time) => {
+          const delta = Math.min(time - previousTime, 32)
+          previousTime = time
+          rotation += delta * 0.0000138
+          drawTrail()
+          requestAnimationFrame(render)
+        }
+
+        buildStarField()
+        addEventListener('resize', buildStarField)
+        requestAnimationFrame(render)
+        requestAnimationFrame(() => requestAnimationFrame(() => surface.classList.add('is-ready')))
+      }
+    </script>
+  </body>
+</html>
