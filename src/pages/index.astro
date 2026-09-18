@@ -124,7 +124,8 @@ import wavingHand from '../../public/images/waving-hand.svg?raw'
           stars.length = 0
           const middle = fieldSize / 2
           const largeScreenScale = Math.max(1, Math.sqrt(width * height / (1920 * 1080)))
-          const starCount = Math.min(2800, Math.max(778, Math.floor(Math.min(1411, width * height / 1181) * largeScreenScale)))
+          const densityBoost = 1 + 0.35 * Math.min(1, Math.max(0, (width - 1440) / 480))
+          const starCount = Math.floor(Math.min(2800, Math.max(778, Math.floor(Math.min(1411, width * height / 1181) * largeScreenScale))) * densityBoost)
           const minimumGap = 30
           const occupied = new Map()
           const occupiedOrbits = []
@@ -149,8 +150,8 @@ import wavingHand from '../../public/images/waving-hand.svg?raw'
           }
 
           {
-            const rightStarCount = Math.min(24, Math.max(6, Math.round(width * height / 60000)))
-            const initialStarCount = Math.min(60, Math.max(12, Math.round(width * height / 30000)))
+            const rightStarCount = Math.round(Math.min(24, Math.max(6, Math.round(width * height / 60000))) * densityBoost)
+            const initialStarCount = Math.round(Math.min(60, Math.max(12, Math.round(width * height / 30000))) * densityBoost)
             for (let pass = 0; pass < 3; pass += 1) {
             const targetCount = pass === 0 ? starCount : pass === 1 ? rightStarCount : initialStarCount
             let placed = 0
